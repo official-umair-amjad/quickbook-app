@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connected to QuickBooks</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <style>
+    body {
+      padding-top: 50px;
+    }
+    .container {
+      max-width: 1100px;
+    }
+    pre {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .nav-tabs {
+      margin-bottom: 20px;
+    }
+    /* Chat panel styles */
+    #chat-container {
+      padding: 0;
+      margin-top: 0;
+      border: none;
+    }
+    #chat-box {
+      height: 300px;
+      overflow-y: auto;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border-radius: 5px;
+      margin-bottom: 15px;
+    }
+    #chat-box p {
+      margin-bottom: 8px;
+    }
+    .typing-indicator {
+      color: #6c757d;
+      font-style: italic;
+    }
+    .chat-user-message {
+      background-color: #e9f5ff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .chat-ai-message {
+      background-color: #f0f0f0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="alert alert-success" role="alert">
+      <h4 class="alert-heading">Connected to QuickBooks!</h4>
+      <p>Your application is now connected to QuickBooks Online Sandbox.</p>
+    </div>
+
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link active"
+          id="view-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#view"
+          type="button"
+          role="tab"
+          aria-controls="view"
+          aria-selected="true"
+        >
+          View Data
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="create-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#create"
+          type="button"
+          role="tab"
+          aria-controls="create"
+          aria-selected="false"
+        >
+          Create Customer
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="chat-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#chat"
+          type="button"
+          role="tab"
+          aria-controls="chat"
+          aria-selected="false"
+        >
+          Chat with AI
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="myTabContent">
+      <!-- View Data Tab -->
+      <div
+        class="tab-pane fade show active"
+        id="view"
+        role="tabpanel"
+        aria-labelledby="view-tab"
+      >
+        <div class="row">
+          <div class="col-md-4 mb-4">
+            <div class="card">
+              <div class="card-header">
+                <h5>QuickBooks Data</h5>
+              </div>
+              <div class="card-body">
+                <div class="list-group">
+                  <button
+                    id="companyInfoBtn"
+                    class="list-group-item list-group-item-action"
+                  >
+                    Company Information
+                  </button>
+                  <button
+                    id="customersBtn"
+                    class="list-group-item list-group-item-action"
+                  >
+                    Customers
+                  </button>
+                  <button
+                    id="invoicesBtn"
+                    class="list-group-item list-group-item-action"
+                  >
+                    Invoices
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-8">
+            <div class="card">
+              <div class="card-header">
+                <h5 id="resultTitle">Results</h5>
+              </div>
+              <div class="card-body">
+                <div id="results">
+                  <p>Click on one of the options to view QuickBooks data.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Create Customer Tab -->
+      <div
+        class="tab-pane fade"
+        id="create"
+        role="tabpanel"
+        aria-labelledby="create-tab"
+      >
+        <div class="row">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header">
+                <h5>Create New Customer</h5>
+              </div>
+              <div class="card-body">
+                <form id="createCustomerForm">
+                  <div class="row mb-3">
+                    <div class="col-md-6">
+                      <label for="displayName" class="form-label">Display Name*</label>
+                      <input type="text" class="form-control" id="displayName" required />
+                    </div>
+                    <div class="col-md-6">
+                      <label for="companyName" class="form-label">Company Name</label>
+                      <input type="text" class="form-control" id="companyName" />
+                    </div>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-6">
+                      <label for="givenName" class="form-label">First Name</label>
+                      <input type="text" class="form-control" id="givenName" />
+                    </div>
+                    <div class="col-md-6">
+                      <label for="familyName" class="form-label">Last Name</label>
+                      <input type="text" class="form-control" id="familyName" />
+                    </div>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-6">
+                      <label for="email" class="form-label">Email</label>
+                      <input type="email" class="form-control" id="email" />
+                    </div>
+                    <div class="col-md-6">
+                      <label for="phone" class="form-label">Phone</label>
+                      <input type="text" class="form-control" id="phone" />
+                    </div>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-12">
+                      <label for="addressLine1" class="form-label">Address Line 1</label>
+                      <input type="text" class="form-control" id="addressLine1" />
+                    </div>
+                  </div>
+                  <div class="row mb-3">
+                    <div class="col-md-4">
+                      <label for="city" class="form-label">City</label>
+                      <input type="text" class="form-control" id="city" />
+                    </div>
+                    <div class="col-md-4">
+                      <label for="state" class="form-label">State</label>
+                      <input type="text" class="form-control" id="state" placeholder="CA" />
+                    </div>
+                    <div class="col-md-4">
+                      <label for="postalCode" class="form-label">Postal Code</label>
+                      <input type="text" class="form-control" id="postalCode" />
+                    </div>
+                  </div>
+                  <button type="submit" class="btn btn-primary">Create Customer</button>
+                </form>
+                <div id="createCustomerResult" class="mt-3"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat with AI Tab -->
+      <div
+        class="tab-pane fade"
+        id="chat"
+        role="tabpanel"
+        aria-labelledby="chat-tab"
+      >
+        <div class="row">
+          <div class="col-md-12">
+            <div class="card">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <h5>Chat with AI Assistant</h5>
+                <div class="d-flex align-items-center">
+                  <div class="me-3">
+                    <select id="ai-provider" class="form-select form-select-sm">
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic Claude</option>
+                    </select>
+                  </div>
+                  <span id="ai-status" class="badge bg-warning">AI Status: Loading...</span>
+                </div>
+              </div>
+              <div class="card-body" style="background-color: #6c757d;">
+                <div id="chat-container" >
+                  <div id="chat-box" class="mb-3 p-3 border rounded" style="height: 400px; overflow-y: auto;"></div>
+                  <div class="input-group">
+                    <input
+                      id="chat-input"
+                      type="text"
+                      class="form-control"
+                      placeholder="Ask about your QuickBooks data..."
+                    />
+                    <button class="btn btn-primary" type="button" id="chat-send-btn">
+                      Send
+                    </button>
+                  </div>
+                  <div class="mt-2 text-muted small">
+                    <p>Example questions:</p>
+                    <ul>
+                      <li>Show me my company information</li>
+                      <li>List all my customers</li>
+                      <li>List all invoices</li>
+                      <li>Find invoices for customer John Smith</li>
+                      <li>Create invoice for John Smith with items: 1 hour consulting at $150</li>
+                      <li>Update invoice 124 set due date to 2025-05-01</li>
+                      <li>Send invoice 123 to john@email.com</li>
+                      <li>Create a new customer named "Acme Corp"</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      // Function to fetch data from API
+      function fetchData(url, title) {
+        document.getElementById("resultTitle").textContent = title;
+        document.getElementById("results").innerHTML = "<p>Loading...</p>";
+
+        fetch(url)
+          .then((response) => {
+            if (!response.ok) {
+              return response.json().then((err) => {
+                throw err;
+              });
+            }
+            return response.json();
+          })
+          .then((data) => {
+            const resultsDiv = document.getElementById("results");
+            if (data.message && data.message.includes("No")) {
+              resultsDiv.innerHTML = `
+                <div class="alert alert-warning">
+                  <h5>No Data Found</h5>
+                  <p>${data.message}</p>
+                  <p>You might need to create some data in your QuickBooks Sandbox first.</p>
+                </div>
+              `;
+              return;
+            }
+            resultsDiv.innerHTML = "<pre>" + JSON.stringify(data, null, 2) + "</pre>";
+          })
+          .catch((error) => {
+            console.error("Error fetching data:", error);
+            let errorMessage = error.error || "Unknown error";
+            let errorDetails = "";
+
+            if (error.details) {
+              errorDetails += `<p><strong>Details:</strong> ${error.details}</p>`;
+            }
+            if (error.code) {
+              errorDetails += `<p><strong>Code:</strong> ${error.code}</p>`;
+            }
+            if (error.type) {
+              errorDetails += `<p><strong>Type:</strong> ${error.type}</p>`;
+            }
+
+            document.getElementById("results").innerHTML = `
+              <div class="alert alert-danger">
+                <h5>Error: ${errorMessage}</h5>
+                ${errorDetails}
+                <p class="mt-3">
+                  <strong>Possible solutions:</strong>
+                  <ul>
+                    <li>Check if your QuickBooks Sandbox has any data</li>
+                    <li>Verify your app permissions in the QuickBooks Developer portal</li>
+                    <li>Try reconnecting to QuickBooks</li>
+                  </ul>
+                </p>
+              </div>
+            `;
+          });
+      }
+
+      // View Data tab event listeners
+      document.getElementById("companyInfoBtn").addEventListener("click", function () {
+        fetchData("/api/company", "Company Information");
+      });
+
+      document.getElementById("customersBtn").addEventListener("click", function () {
+        fetchData("/api/customers", "Customers");
+      });
+
+      document.getElementById("invoicesBtn").addEventListener("click", function () {
+        fetchData("/api/invoices", "Invoices");
+      });
+
+      // Customer Creation Form
+      document.getElementById("createCustomerForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const customerData = {
+          DisplayName: document.getElementById("displayName").value,
+          CompanyName: document.getElementById("companyName").value || document.getElementById("displayName").value,
+          GivenName: document.getElementById("givenName").value,
+          FamilyName: document.getElementById("familyName").value,
+          PrimaryEmailAddr: {
+            Address: document.getElementById("email").value,
+          },
+          PrimaryPhone: {
+            FreeFormNumber: document.getElementById("phone").value,
+          },
+        };
+
+        const line1 = document.getElementById("addressLine1").value;
+        const city = document.getElementById("city").value;
+        const state = document.getElementById("state").value;
+        const postalCode = document.getElementById("postalCode").value;
+
+        if (line1 || city || state || postalCode) {
+          customerData.BillAddr = {
+            Line1: line1,
+            City: city,
+            CountrySubDivisionCode: state,
+            PostalCode: postalCode,
+          };
+        }
+
+        Object.keys(customerData).forEach((key) => {
+          if (customerData[key] === "" || customerData[key] === null) {
+            delete customerData[key];
+          }
+        });
+
+        document.getElementById("createCustomerResult").innerHTML =
+          '<div class="alert alert-info">Creating customer...</div>';
+
+        fetch("/api/customers", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(customerData),
+        })
+          .then((response) => {
+            if (!response.ok) {
+              return response.json().then((err) => {
+                throw err;
+              });
+            }
+            return response.json();
+          })
+          .then((data) => {
+            document.getElementById("createCustomerResult").innerHTML = `
+              <div class="alert alert-success">
+                <h5>Customer Created Successfully!</h5>
+                <p>Customer ID: ${data.Id}</p>
+              </div>
+              <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+            document.getElementById("createCustomerForm").reset();
+          })
+          .catch((error) => {
+            console.error("Error creating customer:", error);
+            let errorMessage = error.error || "Unknown error";
+            let errorDetails = "";
+
+            if (error.details) {
+              errorDetails += `<p><strong>Details:</strong> ${error.details}</p>`;
+            }
+
+            document.getElementById("createCustomerResult").innerHTML = `
+              <div class="alert alert-danger">
+                <h5>Error Creating Customer: ${errorMessage}</h5>
+                ${errorDetails}
+              </div>
+            `;
+          });
+      });
+
+      // Generate a unique session ID for this chat session
+      const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
+      
+      // Check AI status
+      async function checkAIStatus() {
+        const aiStatusBadge = document.getElementById("ai-status");
+        const aiProviderSelect = document.getElementById("ai-provider");
+        
+        try {
+          // Check OpenAI status
+          const openaiResponse = await fetch("/api/ai-chat", {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "Session-ID": sessionId
+            },
+            body: JSON.stringify({ 
+              message: "Hello",
+              provider: "openai"
+            }),
+          });
+          
+          const openaiData = await openaiResponse.json();
+          
+          // Check Anthropic status
+          const anthropicResponse = await fetch("/api/ai-chat", {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "Session-ID": sessionId
+            },
+            body: JSON.stringify({ 
+              message: "Hello",
+              provider: "anthropic"
+            }),
+          });
+          
+          const anthropicData = await anthropicResponse.json();
+          
+          // Determine which providers are available
+          const openaiAvailable = openaiData.provider === "openai" && !openaiData.response.includes("The AI integration will be implemented");
+          const anthropicAvailable = anthropicData.provider === "anthropic" && !anthropicData.response.includes("The AI integration will be implemented");
+          
+          // Update the status badge
+          if (openaiAvailable && anthropicAvailable) {
+            aiStatusBadge.className = "badge bg-success";
+            aiStatusBadge.textContent = "AI Status: Both Providers Active";
+            
+            // Default to Anthropic if both are available
+            aiProviderSelect.value = "anthropic";
+          } else if (openaiAvailable) {
+            aiStatusBadge.className = "badge bg-success";
+            aiStatusBadge.textContent = "AI Status: OpenAI Active";
+            aiProviderSelect.value = "openai";
+          } else if (anthropicAvailable) {
+            aiStatusBadge.className = "badge bg-success";
+            aiStatusBadge.textContent = "AI Status: Anthropic Active";
+            aiProviderSelect.value = "anthropic";
+          } else {
+            aiStatusBadge.className = "badge bg-warning";
+            aiStatusBadge.textContent = "AI Status: No Providers Configured";
+          }
+        } catch (error) {
+          aiStatusBadge.className = "badge bg-danger";
+          aiStatusBadge.textContent = "AI Status: Error";
+          console.error("Error checking AI status:", error);
+        }
+      }
+      
+      // Run the AI status check when the chat tab is shown
+      document.getElementById("chat-tab").addEventListener("shown.bs.tab", checkAIStatus);
+      
+      // Chat with AI - send message function
+      async function sendMessage() {
+        const inputField = document.getElementById("chat-input");
+        const chatBox = document.getElementById("chat-box");
+        const userMessage = inputField.value.trim();
+        if (!userMessage) return;
+
+        // Display user message in chat with styling
+        chatBox.innerHTML += `<div class="chat-user-message"><strong>You:</strong> ${userMessage}</div>`;
+        inputField.value = "";
+        
+        // Show typing indicator
+        const typingIndicator = document.createElement("div");
+        typingIndicator.id = "typing-indicator";
+        typingIndicator.innerHTML = `<div class="typing-indicator"><strong>AI:</strong> <span>Typing...</span></div>`;
+        chatBox.appendChild(typingIndicator);
+        
+        // Scroll to the bottom of chat box
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+          // Get the selected AI provider
+          const selectedProvider = document.getElementById("ai-provider").value;
+          
+          const response = await fetch("/api/ai-chat", {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "Session-ID": sessionId
+            },
+            body: JSON.stringify({ 
+              message: userMessage,
+              provider: selectedProvider
+            }),
+          });
+          
+          // Remove typing indicator
+          const indicator = document.getElementById("typing-indicator");
+          if (indicator) chatBox.removeChild(indicator);
+          
+          const data = await response.json();
+          
+          // Format the response with proper styling
+          let aiResponse = data.response || JSON.stringify(data);
+          
+          // Create provider badge
+          let providerBadge = '';
+          if (data.provider && data.model) {
+            const badgeClass = data.provider === 'anthropic' ? 'bg-primary' : 'bg-success';
+            providerBadge = `<span class="badge ${badgeClass} mb-1">${data.provider} - ${data.model}</span><br>`;
+          }
+          
+          // Add the AI response to the chat with styling and provider info
+          chatBox.innerHTML += `<div class="chat-ai-message">${providerBadge}<strong>AI:</strong> ${aiResponse}</div>`;
+          
+          // Scroll to the bottom of chat box
+          chatBox.scrollTop = chatBox.scrollHeight;
+        } catch (error) {
+          // Remove typing indicator
+          const indicator = document.getElementById("typing-indicator");
+          if (indicator) chatBox.removeChild(indicator);
+          
+          chatBox.innerHTML += `<div class="alert alert-danger mb-2"><strong>Error:</strong> ${error.message}</div>`;
+          chatBox.scrollTop = chatBox.scrollHeight;
+        }
+      }
+
+      // Chat send button event
+      document.getElementById("chat-send-btn").addEventListener("click", sendMessage);
+
+      // Allow pressing Enter to send message
+      document.getElementById("chat-input").addEventListener("keypress", function (e) {
+        if (e.key === "Enter") {
+          sendMessage();
+        }
+      });
+      
+      // Welcome message when chat tab is first shown
+      document.getElementById("chat-tab").addEventListener("shown.bs.tab", function() {
+        const chatBox = document.getElementById("chat-box");
+        if (chatBox.innerHTML === "") {
+          chatBox.innerHTML = `
+            <div class="alert alert-info">
+              <strong>Welcome to the QuickBooks AI Assistant!</strong>
+              <p>You can ask questions about your QuickBooks data or request actions like creating customers.</p>
+              <p>This application supports multiple AI providers:</p>
+              <ul>
+                <li><strong>OpenAI</strong> - Powerful general-purpose AI (not working as no api)</li>
+                <li><strong>Anthropic Claude 3.5 Sonnet</strong> - Advanced reasoning capabilities with cache control for better performance</li>
+              </ul>
+              <p>Select your preferred provider from the dropdown above.</p>
+            </div>
+          `;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
