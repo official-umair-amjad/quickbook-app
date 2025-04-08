@@ -531,11 +531,13 @@ const conversationHistory = {};
 
 app.post("/api/ai-chat", async (req, res) => {
   try {
+    console.log("AI Chat request received");
     const { message, provider: requestedProvider = 'openai', model = '' } = req.body;
     const sessionId = req.headers['session-id'] || 'default-session';
 
     // Initialize conversation history for this session if it doesn't exist
     if (!conversationHistory[sessionId]) {
+      console.log("Initializing new conversation history for session:", sessionId);
       conversationHistory[sessionId] = [
         {
           role: "system",
@@ -583,26 +585,17 @@ Remember to always call the appropriate tool and present the results directly wi
     if (requestedProvider === 'anthropic' && process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'your-anthropic-api-key-here') {
       // Use Anthropic Claude
       provider = anthropic;
-
-      // Default to Claude 3.5 Sonnet if no specific model requested
       modelId = model || 'claude-3-5-sonnet-20240620';
-
-      // Add options for Claude 3.5 Sonnet
       providerOptions = {
         anthropic: {
-          // Add cache control for better performance
           cacheControl: { type: 'ephemeral' }
         }
       };
-
       console.log(`Using Anthropic Claude model: ${modelId}`);
     } else if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your-openai-api-key-here') {
       // Use OpenAI
       provider = openai;
-
-      // Default to GPT-4 if no specific model requested
       modelId = model || 'gpt-4';
-
       console.log(`Using OpenAI model: ${modelId}`);
     } else {
       // If no API keys are configured, return a placeholder response
@@ -611,18 +604,12 @@ Remember to always call the appropriate tool and present the results directly wi
       return res.json({ response: placeholderResponse });
     }
 
-    // Generate AI response with conversation history
-    const { text, toolCalls } = await generateText({
-      model: provider(modelId),
-      messages: conversationHistory[sessionId],
-      tools: [
-        // Company tools
+    // Available tools
+    const tools = [
         getCompanyInfo,
-        // Customer tools
         listCustomers,
         createCustomer,
         findCustomerByName,
-        // Invoice tools
         listInvoices,
         findInvoiceById,
         findInvoicesByCustomer,
@@ -630,190 +617,430 @@ Remember to always call the appropriate tool and present the results directly wi
         updateInvoice,
         deleteInvoice,
         sendInvoiceEmail
-      ],
+    ];
+
+    // Tool name map for easy lookup
+    const toolMap = {
+      "0": "getCompanyInfo",
+      "1": "listCustomers",
+      "2": "createCustomer", 
+      "3": "findCustomerByName",
+      "4": "listInvoices",
+      "5": "findInvoiceById",
+      "6": "findInvoicesByCustomer",
+      "7": "createInvoice",
+      "8": "updateInvoice",
+      "9": "deleteInvoice",
+      "10": "sendInvoiceEmail"
+    };
+
+    console.log("Generating AI response with tools");
+    
+    // Determine if it's a direct tool call request based on common patterns
+    const isCustomerListRequest = message.toLowerCase().includes('list') && message.toLowerCase().includes('customer');
+    const isInvoiceListRequest = message.toLowerCase().includes('list') && message.toLowerCase().includes('invoice');
+    const isCompanyInfoRequest = message.toLowerCase().includes('company') && (message.toLowerCase().includes('info') || message.toLowerCase().includes('information'));
+    
+    let directToolCall = null;
+    
+    // For direct tool calls, execute them immediately
+    if (isCustomerListRequest) {
+      console.log("Direct customer list request detected, executing listCustomers tool");
+      try {
+        const result = await listCustomers.execute({});
+        console.log("Direct listCustomers result:", result ? "Success" : "Failed");
+        if (result) {
+          directToolCall = {
+            name: "listCustomers",
+            result: result
+          };
+        }
+      } catch (error) {
+        console.error("Error executing direct customer list:", error);
+      }
+    } else if (isInvoiceListRequest) {
+      const isPaidRequest = message.toLowerCase().includes('paid');
+      const isUnpaidRequest = message.toLowerCase().includes('unpaid');
+      let status = 'All';
+      
+      if (isPaidRequest) status = 'Paid';
+      if (isUnpaidRequest) status = 'Unpaid';
+      
+      console.log(`Direct invoice list request detected with status: ${status}`);
+      try {
+        const result = await listInvoices.execute({ status });
+        console.log("Direct listInvoices result:", result ? "Success" : "Failed");
+        if (result) {
+          directToolCall = {
+            name: "listInvoices",
+            result: result
+          };
+        }
+      } catch (error) {
+        console.error("Error executing direct invoice list:", error);
+      }
+    } else if (isCompanyInfoRequest) {
+      console.log("Direct company info request detected");
+      try {
+        const result = await getCompanyInfo.execute({});
+        console.log("Direct getCompanyInfo result:", result ? "Success" : "Failed");
+        if (result) {
+          directToolCall = {
+            name: "getCompanyInfo",
+            result: result
+          };
+        }
+      } catch (error) {
+        console.error("Error executing direct company info:", error);
+      }
+    }
+    
+    // Generate AI response with conversation history and tools
+    const { text, toolCalls } = await generateText({
+      model: provider(modelId),
+      messages: conversationHistory[sessionId],
+      tools: tools,
       providerOptions,
     });
 
-    console.log("AI generated response text:", text);
+    console.log("AI response generated");
+    console.log("Text response:", text ? text.substring(0, 100) + "..." : "No text response");
     console.log("Tool calls:", toolCalls ? `${toolCalls.length} tool calls` : "none");
-    if (toolCalls && toolCalls.length > 0) {
-      console.log(`Last tool called: ${toolCalls[toolCalls.length - 1].name}`);
-      // Dump the full tool call for debugging
-      console.log("Last tool call details:", JSON.stringify(toolCalls[toolCalls.length - 1], null, 2));
-    }
 
     // Process tool calls if any
-    let finalResponse = text;
-    if (toolCalls && toolCalls.length > 0) {
-      // Format the tool results into a more conversational response
-      const lastToolCall = toolCalls[toolCalls.length - 1];
-      
-      // Debug the lastToolCall object
-      console.log("Processing tool call:", lastToolCall.name || lastToolCall.toolName || "unnamed tool");
-      
-      // Check for unwanted phrases in AI response
-      const unwantedPhrases = [
-        "I'll retrieve", 
-        "I will retrieve",
-        "I'll use", 
-        "I will use", 
-        "Here's the function", 
-        "I'll get",
-        "I will get",
-        "Let me get",
-        "Let me list",
-        "Let me show",
-        "I'll show",
-        "Here is",
-        "To list all customers",
-        "To list all invoices",
-        "Certainly!"
-      ];
-      
-      const containsUnwantedPhrase = unwantedPhrases.some(phrase => 
-        finalResponse && finalResponse.toLowerCase().includes(phrase.toLowerCase())
-      );
-      
-      if (containsUnwantedPhrase) {
-        console.log("Found unwanted phrase in AI response, will override with direct data response");
-      }
-      
-      // Special handling for customer list request - direct access to tool result
-      if (lastToolCall.toolName === "1" || (lastToolCall.name && lastToolCall.name.includes("listCustomers"))) {
-        // This is a customer list request
-        console.log("Detected customer list request");
+    let finalResponse = text || "I'm processing your request...";
+    
+    // If we have a direct tool call result, use that instead of AI's toolCalls if they failed
+    const effectiveToolCalls = (toolCalls && toolCalls.length > 0) ? toolCalls : (directToolCall ? [directToolCall] : []);
+    
+    if (effectiveToolCalls.length > 0) {
+      try {
+        console.log("Processing tool calls");
         
-        try {
-          // Get the raw result
-          const rawResult = lastToolCall.result;
-          console.log("Raw tool result keys:", Object.keys(rawResult));
+        // Get the last tool call
+        const lastToolCall = effectiveToolCalls[effectiveToolCalls.length - 1];
+        
+        // Log the entire tool call for debugging
+        console.log("Full tool call:", JSON.stringify({
+          name: lastToolCall.name || lastToolCall.toolName,
+          hasResult: !!lastToolCall.result,
+          resultKeys: lastToolCall.result ? Object.keys(lastToolCall.result) : []
+        }));
+        
+        // Get tool name from various possible formats
+        let toolName = lastToolCall.name || lastToolCall.toolName || lastToolCall.function?.name;
+        
+        // Handle numeric tool indexes
+        if (toolMap[toolName]) {
+          toolName = toolMap[toolName];
+        }
+        
+        console.log("Processing tool:", toolName);
+
+        // Check if tool has a result
+        if (lastToolCall.result) {
+          // Log the full result for debugging
+          console.log("Tool result detected:", JSON.stringify({
+            hasData: !!lastToolCall.result.data,
+            hasError: !!lastToolCall.result.error,
+            dataType: lastToolCall.result.data ? (Array.isArray(lastToolCall.result.data) ? 'array' : 'object') : 'none',
+            dataLength: lastToolCall.result.data && Array.isArray(lastToolCall.result.data) ? lastToolCall.result.data.length : 'n/a'
+          }));
           
-          // Extract customers using multiple approaches
-          let customers = null;
-          
-          // Method 1: Try QueryResponse.Customer direct access
-          if (rawResult.QueryResponse && Array.isArray(rawResult.QueryResponse.Customer)) {
-            customers = rawResult.QueryResponse.Customer;
-            console.log(`Found ${customers.length} customers using QueryResponse.Customer direct access`);
-          }
-          // Method 2: Try data array access
-          else if (rawResult.data && Array.isArray(rawResult.data)) {
-            customers = rawResult.data;
-            console.log(`Found ${customers.length} customers using data array access`);
-          }
-          // Method 3: If rawResult itself is an array
-          else if (Array.isArray(rawResult)) {
-            customers = rawResult;
-            console.log(`Found ${customers.length} customers from direct array result`);
-          }
-          // Method 4: Check for full response object with time property (QuickBooks API format)
-          else if (rawResult.QueryResponse && rawResult.time) {
-            customers = rawResult.QueryResponse.Customer || [];
-            console.log(`Found ${customers.length} customers using full QB API response format`);
-          }
-          
-          // Generate response based on customers
+          // Process based on the specific tool
+          if (toolName === "listCustomers" || toolName.includes("listCustomers")) {
+            try {
+              let customers = [];
+              const result = lastToolCall.result;
+              
+              // Try to extract customer data
+              if (result.data && Array.isArray(result.data)) {
+                customers = result.data;
+              } else if (result.QueryResponse && Array.isArray(result.QueryResponse.Customer)) {
+                customers = result.QueryResponse.Customer;
+              } else if (Array.isArray(result)) {
+                customers = result;
+              }
+              
+              // Use direct customer list if AI failed to extract
+              if ((!customers || customers.length === 0) && directToolCall && directToolCall.name === "listCustomers" && directToolCall.result.data) {
+                customers = directToolCall.result.data;
+                console.log(`Using ${customers.length} customers from direct tool call`);
+              }
+              
           if (customers && customers.length > 0) {
-            // Format customer list
-            finalResponse = `Here are your customers:\n\n${customers.map((c, i) => {
-              const email = c.PrimaryEmailAddr ? ` (${c.PrimaryEmailAddr.Address})` : '';
-              const phone = c.PrimaryPhone ? ` - ${c.PrimaryPhone.FreeFormNumber}` : '';
-              return `${i+1}. ${c.DisplayName}${email}${phone}`;
-            }).join('\n')}`;
-            console.log("Successfully formatted customer list");
-          } else if (customers && customers.length === 0) {
-            finalResponse = "You don't have any customers in your QuickBooks account yet.";
-            console.log("No customers found");
+                // Return in markdown table format
+                finalResponse = `### Your Customers\n\n| # | Customer Name | Email | Phone |\n|---|--------------|-------|-------|\n`;
+                
+                customers.forEach((c, i) => {
+                  const name = c.DisplayName || 'Unknown';
+                  const email = c.PrimaryEmailAddr ? c.PrimaryEmailAddr.Address : '';
+                  const phone = c.PrimaryPhone ? c.PrimaryPhone.FreeFormNumber : '';
+                  finalResponse += `| ${i+1} | **${name}** | ${email} | ${phone} |\n`;
+                });
+              } else if (result.error) {
+                finalResponse = `I encountered an issue: ${result.error}`;
           } else {
-            // Fallback - dump raw result for debugging
-            console.log("WARNING: Could not extract customers from tool result");
-            console.log("Raw result:", JSON.stringify(rawResult).substring(0, 500) + "...");
-            finalResponse = "I tried to retrieve your customer list but couldn't format the data properly.";
+                finalResponse = "You don't have any customers in your QuickBooks account.";
           }
         } catch (error) {
           console.error("Error processing customer list:", error);
-          finalResponse = "I encountered an error while processing your customer list.";
-        }
-      } 
-      // Process other tool calls using the existing approach
-      else if (lastToolCall.result) {
-        // If the AI already provided a response, keep it only if it doesn't contain unwanted phrases
-        if (finalResponse && finalResponse.trim() !== '' && !containsUnwantedPhrase) {
-          // The text response already contains a suitable response
-          console.log("Using AI's formatted response:", finalResponse);
-        } else {
-          // Format the tool result into a readable response
-          try {
+              
+              // Try the direct tool call as a fallback
+              if (directToolCall && directToolCall.name === "listCustomers" && directToolCall.result.data) {
+                const customers = directToolCall.result.data;
+                // Return in markdown table format
+                finalResponse = `### Your Customers (from fallback)\n\n| # | Customer Name | Email | Phone |\n|---|--------------|-------|-------|\n`;
+                
+                customers.forEach((c, i) => {
+                  const name = c.DisplayName || 'Unknown';
+                  const email = c.PrimaryEmailAddr ? c.PrimaryEmailAddr.Address : '';
+                  const phone = c.PrimaryPhone ? c.PrimaryPhone.FreeFormNumber : '';
+                  finalResponse += `| ${i+1} | **${name}** | ${email} | ${phone} |\n`;
+                });
+              } else {
+                finalResponse = "I encountered an error while processing your customer list. Please try again.";
+              }
+            }
+          } 
+          else if (toolName === "listInvoices" || toolName.includes("listInvoices")) {
+            try {
+              let invoices = [];
             const result = lastToolCall.result;
             
-            // Log the structure of the result object
-            console.log("Tool result structure:", JSON.stringify({
-              hasData: !!result.data,
-              hasQueryResponse: !!result.QueryResponse,
-              hasCustomers: result.QueryResponse ? !!result.QueryResponse.Customer : false,
-              customerCount: result.QueryResponse && result.QueryResponse.Customer ? result.QueryResponse.Customer.length : 0,
-              resultKeys: Object.keys(result)
-            }, null, 2));
-            
-            // Map toolIndex to toolName - Claude sometimes returns tool index instead of name
-            // In our array of tools passed to generateText, listCustomers is at index 1
-            const toolMap = {
-              "0": "getCompanyInfo",
-              "1": "listCustomers",
-              "2": "createCustomer", 
-              "3": "findCustomerByName",
-              "4": "listInvoices",
-              "5": "findInvoiceById",
-              "6": "findInvoicesByCustomer",
-              "7": "createInvoice",
-              "8": "updateInvoice",
-              "9": "deleteInvoice",
-              "10": "sendInvoiceEmail"
-            };
-            
-            // Check for the tool type - support multiple ways to identify the tool
-            const toolIndex = lastToolCall.toolName;
-            const toolName = toolMap[toolIndex] || 
-                           lastToolCall.name || 
-                           (lastToolCall.type === 'function' && lastToolCall.function && lastToolCall.function.name) ||
-                           "unknown";
-            
-            console.log("Identified tool name:", toolName, "from index:", toolIndex);
-            
-            // Handle different tool types for better formatting
-            if ((toolName === 'listInvoices' || toolName.includes('listInvoices'))) {
-                let invoices = [];
+              // Try to extract invoice data
+              if (result.data && Array.isArray(result.data)) {
+                invoices = result.data;
+              } else if (result.QueryResponse && Array.isArray(result.QueryResponse.Invoice)) {
+                invoices = result.QueryResponse.Invoice;
+              } else if (Array.isArray(result)) {
+                invoices = result;
+              }
+              
+              // Get filter status if provided
+              let status = "All";
+              if (lastToolCall.args && lastToolCall.args.status) {
+                status = lastToolCall.args.status;
+              } else if (typeof lastToolCall.args === 'string') {
+                try {
+                  const parsedArgs = JSON.parse(lastToolCall.args);
+                  if (parsedArgs.status) {
+                    status = parsedArgs.status;
+                  }
+                } catch (e) {}
+              }
+              
+              // Use direct invoice list if AI failed to extract
+              if ((!invoices || invoices.length === 0) && directToolCall && directToolCall.name === "listInvoices" && directToolCall.result.data) {
+                invoices = directToolCall.result.data;
+                console.log(`Using ${invoices.length} invoices from direct tool call`);
+              }
+              
+              if (invoices && invoices.length > 0) {
+                const statusLabel = status !== "All" ? status + " " : "";
                 
-                // Try different ways to access invoices
-                if (result.QueryResponse && result.QueryResponse.Invoice) {
-                    invoices = result.QueryResponse.Invoice;
-                } else if (result.data) {
-                    invoices = result.data;
+                // Return in markdown table format
+                finalResponse = `### Your ${statusLabel}Invoices\n\n| Invoice # | Customer | Amount | Status |\n|-----------|----------|--------|--------|\n`;
+                
+                invoices.forEach((inv) => {
+                  const invoiceNum = inv.DocNumber || inv.Id;
+                  const customer = inv.CustomerRef?.name || 'Unknown Customer';
+                  const amount = inv.TotalAmt;
+                  const isPaid = inv.Balance === 0 || inv.Balance <= 0;
+                  const statusDisplay = isPaid ? '✅ Paid' : '❌ Unpaid';
+                  
+                  finalResponse += `| ${invoiceNum} | ${customer} | $${amount} | ${statusDisplay} |\n`;
+                });
+              } else if (result.error) {
+                finalResponse = `I encountered an issue: ${result.error}`;
+              } else {
+                finalResponse = `You don't have any ${status !== "All" ? status + " " : ""}invoices in your QuickBooks account.`;
+              }
+            } catch (error) {
+              console.error("Error processing invoice list:", error);
+              
+              // Try the direct tool call as a fallback
+              if (directToolCall && directToolCall.name === "listInvoices" && directToolCall.result.data) {
+                const invoices = directToolCall.result.data;
+                const status = directToolCall.result.filterStatus || "All";
+                const statusLabel = status !== "All" ? status + " " : "";
+                
+                // Return in markdown table format
+                finalResponse = `### Your ${statusLabel}Invoices (from fallback)\n\n| Invoice # | Customer | Amount | Status |\n|-----------|----------|--------|--------|\n`;
+                
+                invoices.forEach((inv) => {
+                  const invoiceNum = inv.DocNumber || inv.Id;
+                  const customer = inv.CustomerRef?.name || 'Unknown Customer';
+                  const amount = inv.TotalAmt;
+                  const isPaid = inv.Balance === 0 || inv.Balance <= 0;
+                  const statusDisplay = isPaid ? '✅ Paid' : '❌ Unpaid';
+                  
+                  finalResponse += `| ${invoiceNum} | ${customer} | $${amount} | ${statusDisplay} |\n`;
+                });
+                } else {
+                finalResponse = "I encountered an error while processing your invoice list. Please try again.";
+              }
+            }
+          }
+          else if (toolName === "getCompanyInfo" || toolName.includes("getCompanyInfo")) {
+            try {
+              const result = lastToolCall.result;
+              const companyInfo = result.data || result;
+              
+              // Use direct company info if AI failed to extract
+              if ((!companyInfo || Object.keys(companyInfo).length === 0) && directToolCall && directToolCall.name === "getCompanyInfo" && directToolCall.result.data) {
+                companyInfo = directToolCall.result.data;
+                console.log("Using company info from direct tool call");
+              }
+              
+              if (companyInfo && Object.keys(companyInfo).length > 0) {
+                // Using markdown format for company info
+                finalResponse = `### Your Company Information\n\n`;
+                finalResponse += `**Company Name:** ${companyInfo.CompanyName || 'Unknown'}\n\n`;
+                
+                finalResponse += `#### Contact Details\n\n`;
+                
+                if (companyInfo.CompanyAddr) {
+                  const addr = companyInfo.CompanyAddr;
+                  finalResponse += `**Address:** ${addr.Line1 || ''}, ${addr.City || ''}, ${addr.CountrySubDivisionCode || ''} ${addr.PostalCode || ''}\n\n`;
                 }
                 
-                if (invoices.length === 0) {
-                    finalResponse = "You don't have any invoices in your QuickBooks account yet.";
-                } else {
-                    finalResponse = `Here are your invoices:\n\n${invoices.map((inv, i) => 
-                      `${i+1}. Invoice #${inv.DocNumber || inv.Id} - ${inv.CustomerRef.name} - $${inv.TotalAmt} (${inv.Balance > 0 ? 'Unpaid' : 'Paid'})`
-                    ).join('\n')}`;
+                if (companyInfo.PrimaryPhone) {
+                  finalResponse += `**Phone:** ${companyInfo.PrimaryPhone.FreeFormNumber}\n\n`;
+                }
+                
+                if (companyInfo.PrimaryEmailAddr) {
+                  finalResponse += `**Email:** ${companyInfo.PrimaryEmailAddr.Address}\n\n`;
+                }
+                
+                if (companyInfo.LegalName || companyInfo.Industry) {
+                  finalResponse += `#### Business Details\n\n`;
+                  
+                  if (companyInfo.LegalName) {
+                    finalResponse += `**Legal Name:** ${companyInfo.LegalName}\n\n`;
+                  }
+                  
+                  if (companyInfo.Industry) {
+                    finalResponse += `**Industry:** ${companyInfo.Industry}\n\n`;
+                  }
                 }
             } else if (result.error) {
-              // Handle errors gracefully
               finalResponse = `I encountered an issue: ${result.error}`;
-            } else if (result.data) {
-              // Generic data handler for other tools
-              finalResponse = `Here's what I found: ${JSON.stringify(result.data, null, 2)}`;
             } else {
-              // Fallback if no structured format is detected
-              finalResponse = `Result: ${JSON.stringify(result, null, 2)}`;
+                finalResponse = "I couldn't retrieve your company information.";
             }
           } catch (error) {
-            console.error("Error formatting tool result:", error);
-            finalResponse = "I found some information but had trouble formatting it for display.";
+              console.error("Error processing company info:", error);
+              
+              // Try the direct tool call as a fallback
+              if (directToolCall && directToolCall.name === "getCompanyInfo" && directToolCall.result.data) {
+                const companyInfo = directToolCall.result.data;
+                
+                // Using markdown format for company info
+                finalResponse = `### Your Company Information\n\n`;
+                finalResponse += `**Company Name:** ${companyInfo.CompanyName || 'Unknown'}\n\n`;
+                
+                finalResponse += `#### Contact Details\n\n`;
+                
+                if (companyInfo.CompanyAddr) {
+                  const addr = companyInfo.CompanyAddr;
+                  finalResponse += `**Address:** ${addr.Line1 || ''}, ${addr.City || ''}, ${addr.CountrySubDivisionCode || ''} ${addr.PostalCode || ''}\n\n`;
+                }
+                
+                if (companyInfo.PrimaryPhone) {
+                  finalResponse += `**Phone:** ${companyInfo.PrimaryPhone.FreeFormNumber}\n\n`;
+                }
+                
+                if (companyInfo.PrimaryEmailAddr) {
+                  finalResponse += `**Email:** ${companyInfo.PrimaryEmailAddr.Address}\n\n`;
+                }
+              } else {
+                finalResponse = "I encountered an error while retrieving your company information.";
+              }
+            }
           }
+          else if (lastToolCall.result.error) {
+            finalResponse = `I encountered an issue: ${lastToolCall.result.error}`;
+          }
+          else {
+            // For other tools, use a generic approach to display the result
+            try {
+              if (lastToolCall.result.data) {
+                finalResponse = `Here's what I found: ${JSON.stringify(lastToolCall.result.data, null, 2)}`;
+              } else {
+                finalResponse = `Result: ${JSON.stringify(lastToolCall.result, null, 2)}`;
+              }
+            } catch (error) {
+              console.error("Error formatting result:", error);
+              finalResponse = "I found some information but had trouble formatting it properly.";
+            }
+          }
+        } else if (directToolCall && directToolCall.result) {
+          // If AI tool call had no result, but we have a direct tool call with result
+          console.log("No result in AI tool call, using direct tool call result");
+          
+          if (directToolCall.name === "listCustomers" && directToolCall.result.data) {
+            const customers = directToolCall.result.data;
+            // Return in markdown table format
+            finalResponse = `### Your Customers\n\n| # | Customer Name | Email | Phone |\n|---|--------------|-------|-------|\n`;
+            
+            customers.forEach((c, i) => {
+              const name = c.DisplayName || 'Unknown';
+              const email = c.PrimaryEmailAddr ? c.PrimaryEmailAddr.Address : '';
+              const phone = c.PrimaryPhone ? c.PrimaryPhone.FreeFormNumber : '';
+              finalResponse += `| ${i+1} | **${name}** | ${email} | ${phone} |\n`;
+            });
+          } else if (directToolCall.name === "listInvoices" && directToolCall.result.data) {
+            const invoices = directToolCall.result.data;
+            const status = directToolCall.result.filterStatus || "All";
+            const statusLabel = status !== "All" ? status + " " : "";
+            
+            // Return in markdown table format
+            finalResponse = `### Your ${statusLabel}Invoices\n\n| Invoice # | Customer | Amount | Status |\n|-----------|----------|--------|--------|\n`;
+            
+            invoices.forEach((inv) => {
+              const invoiceNum = inv.DocNumber || inv.Id;
+              const customer = inv.CustomerRef?.name || 'Unknown Customer';
+              const amount = inv.TotalAmt;
+              const isPaid = inv.Balance === 0 || inv.Balance <= 0;
+              const statusDisplay = isPaid ? '✅ Paid' : '❌ Unpaid';
+              
+              finalResponse += `| ${invoiceNum} | ${customer} | $${amount} | ${statusDisplay} |\n`;
+            });
+          } else if (directToolCall.name === "getCompanyInfo" && directToolCall.result.data) {
+            const companyInfo = directToolCall.result.data;
+            
+            // Using markdown format for company info
+            finalResponse = `### Your Company Information\n\n`;
+            finalResponse += `**Company Name:** ${companyInfo.CompanyName || 'Unknown'}\n\n`;
+            
+            finalResponse += `#### Contact Details\n\n`;
+            
+            if (companyInfo.CompanyAddr) {
+              const addr = companyInfo.CompanyAddr;
+              finalResponse += `**Address:** ${addr.Line1 || ''}, ${addr.City || ''}, ${addr.CountrySubDivisionCode || ''} ${addr.PostalCode || ''}\n\n`;
+            }
+            
+            if (companyInfo.PrimaryPhone) {
+              finalResponse += `**Phone:** ${companyInfo.PrimaryPhone.FreeFormNumber}\n\n`;
+            }
+            
+            if (companyInfo.PrimaryEmailAddr) {
+              finalResponse += `**Email:** ${companyInfo.PrimaryEmailAddr.Address}\n\n`;
+            }
+          } else {
+            finalResponse = "I tried to process your request but couldn't format the result properly. Please try again.";
+          }
+        } else {
+          console.log("No result available from any tool call");
+          finalResponse = "I tried to process your request but didn't receive any data back. Please try again.";
         }
+      } catch (error) {
+        console.error("Error processing tool calls:", error);
+        finalResponse = "I encountered an error while processing your request.";
       }
+    } else if (!text || text.trim() === '') {
+      finalResponse = "I'm not sure how to respond to that. Could you please try rephrasing your question?";
     }
     
     // Add AI response to history
