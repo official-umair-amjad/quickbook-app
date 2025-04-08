@@ -67,24 +67,51 @@ export const listCustomers = tool({
   parameters: z.object({}),
   execute: async () => {
     try {
+      console.log('listCustomers tool called');
       const response = await fetch('http://localhost:3000/api/customers');
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error fetching customers:', errorData);
+        return { error: errorData.error || 'Failed to retrieve customers' };
+      }
+      
       const data = await response.json();
       
       if (data.error) {
-        return {
-          error: data.error
-        };
+        console.error('Error in customer data:', data.error);
+        return { error: data.error };
       }
 
       // Extract just the Customer array from QueryResponse
       const customers = data.QueryResponse?.Customer || [];
       
+      console.log(`Got ${customers.length} customers from QuickBooks API`);
+      
+      // If no customers, return an informative message instead of an empty array
+      if (customers.length === 0) {
+        return {
+          data: [],
+          message: "No customers found in your QuickBooks account.",
+          count: 0
+        };
+      }
+      
+      // Log a sample of the data to help with debugging
+      if (customers.length > 0) {
+        console.log('Sample customer data:', JSON.stringify(customers[0].DisplayName));
+      }
+      
       return {
-        data: customers
+        data: customers,
+        count: customers.length,
+        success: true
       };
     } catch (error) {
+      console.error('Error in listCustomers tool:', error);
       return {
-        error: 'Failed to retrieve customers'
+        error: 'Failed to retrieve customers: ' + error.message,
+        success: false
       };
     }
   },
@@ -102,26 +129,45 @@ export const listInvoices = tool({
   }),
   execute: async ({ status }) => {
     try {
+      console.log(`listInvoices tool called with status: ${status || 'All'}`);
       const response = await fetch('http://localhost:3000/api/invoices');
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error fetching invoices:', errorData);
+        return { error: errorData.error || 'Failed to retrieve invoices' };
+      }
+      
       const data = await response.json();
       
       if (data.error) {
+        console.error('Error in invoice data:', data.error);
         return { error: data.error };
       }
 
       let invoices = data.QueryResponse?.Invoice || [];
       
+      console.log(`Got ${invoices.length} invoices from QuickBooks API`);
+      
       // Filter invoices if status is specified
       if (status && status !== 'All') {
+        const originalCount = invoices.length;
         invoices = invoices.filter(invoice => {
           const isPaid = invoice.Balance === 0;
           return status === 'Paid' ? isPaid : !isPaid;
         });
+        console.log(`Filtered from ${originalCount} to ${invoices.length} ${status} invoices`);
       }
       
-      return { data: invoices };
+      return { 
+        data: invoices,
+        filtered: status !== 'All',
+        filterStatus: status || 'All',
+        count: invoices.length
+      };
     } catch (error) {
-      return { error: 'Failed to retrieve invoices' };
+      console.error('Error in listInvoices tool:', error);
+      return { error: 'Failed to retrieve invoices: ' + error.message };
     }
   },
 });
